@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
-import { resolveElementSource } from "../source/sourceResolver.js";
+import {
+  resolveElementSource,
+  updateElementClassName,
+} from "../source/sourceResolver.js";
 import type { WebviewToExtensionMessage } from "../shared/protocol.js";
 
 export class DesignerPanel {
@@ -58,6 +61,37 @@ export class DesignerPanel {
             type: "sourceResolved",
             match,
           });
+          return;
+        }
+
+        if (message.type === "updateClassName") {
+          try {
+            const match = await updateElementClassName(
+              message.selection,
+              message.className,
+            );
+
+            await panel.webview.postMessage({
+              type: "sourceUpdated",
+              ok: match !== null,
+              message:
+                match !== null
+                  ? "Classes saved. Waiting for the preview to updated..."
+                  : "Frameweave could not safely edit this className.",
+              match,
+            });
+          } catch (error) {
+            await panel.webview.postMessage({
+              type: "sourceUpdated",
+              ok: false,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unable to update the selected element.",
+              match: null,
+            });
+          }
+
           return;
         }
 
@@ -158,13 +192,17 @@ function createWebviewHtml(
 }
 
 function isWebviewMessage(value: unknown): value is WebviewToExtensionMessage {
-  if (typeof value !== "object" || value === null || !("type" in value)) {
+  if (typeof value !== "object" || value === null || !("type" in value))
     return false;
-  }
-
   if (value.type === "connectPreview") return true;
+  if (value.type === "resolveSource") return "selection" in value;
 
-  return value.type === "resolveSource" && "selection" in value;
+  return (
+    value.type === "updateClassName" &&
+    "selection" in value &&
+    "className" in value &&
+    typeof value.className === "string"
+  );
 }
 
 function escapeHtmlAttribute(value: string): string {
