@@ -10,15 +10,33 @@ export class ProjectDetector {
   async detectWorkspace(
     folder: vscode.WorkspaceFolder,
   ): Promise<WorkspaceProfile> {
-    const manifestUri = vscode.Uri.joinPath(folder.uri, "package.json");
+    const manifestUris = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(
+        folder.uri,
+        "{package.json,apps/*/package.json}",
+      ),
+      "**/{node_modules,.git,dist,.next,out,coverage}/**",
+      100,
+    );
 
-    const application = await this.detectApplication(folder, manifestUri);
+    manifestUris.sort((left, right) => left.path.localeCompare(right.path));
+
+    const detectedApplications = await Promise.all(
+      manifestUris.map((manifestUri) =>
+        this.detectApplication(folder, manifestUri),
+      ),
+    );
+
+    const applications = detectedApplications.filter(
+      (application): application is ApplicationProfile =>
+        application !== undefined,
+    );
 
     return {
       name: folder.name,
       rootPath: folder.uri.fsPath,
       packageManager: await this.detectPackageManager(folder.uri),
-      applications: application ? [application] : [],
+      applications,
     };
   }
 
@@ -27,13 +45,14 @@ export class ProjectDetector {
     manifestUri: vscode.Uri,
   ): Promise<ApplicationProfile | undefined> {
     try {
-      const context = await createDetectionContext(folder.uri, manifestUri);
-
+      const rootUri = vscode.Uri.joinPath(manifestUri, "..");
+      const context = await createDetectionContext(rootUri, manifestUri);
       const technologies = await this.registry.detectAll(context);
+      const fallbackName = rootUri.path.split("/").at(-1) ?? folder.name;
 
       return {
-        name: context.manifest.name ?? folder.name,
-        rootPath: ".",
+        name: context.manifest.name ?? fallbackName,
+        rootPath: vscode.workspace.asRelativePath(rootUri, false) || ".",
         technologies,
       };
     } catch {
