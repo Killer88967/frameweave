@@ -25,6 +25,14 @@ const webviewOptions = {
   sourcemap: true,
   sourcesContent: false,
   logLevel: "info",
+  define: {
+    "process.env.NODE_ENV": JSON.stringify(
+      watch ? "development" : "production",
+    ),
+  },
+  minify: !watch,
+  treeShaking: true,
+  legalComments: "none",
 };
 
 if (watch) {

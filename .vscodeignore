@@ -1,10 +1,11 @@
 .devcontainer/**
 .github/**
 .vscode/**
+apps/**
 src/**
 .gitignore
 esbuild.mjs
 tsconfig.json
 pnpm-lock.yaml
+pnpm-workspace.yaml
 **/*.map
-apps/**
