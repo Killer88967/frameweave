@@ -44,12 +44,45 @@ export class DesignerPanel {
       undefined,
       this.disposables,
     );
+
+    panel.webview.onDidReceiveMessage(
+      async (message: unknown) => {
+        if (!isConnectPreviewMessage(message)) {
+          return;
+        }
+
+        const port = await vscode.window.showInputBox({
+          title: "Connect Frameweave Preview",
+          prompt: "Enter the application's development server port",
+          value: "3000",
+          validateInput: (value) =>
+            /^\d+$/.test(value) ? undefined : "Enter a valid port number.",
+        });
+
+        if (!port) {
+          return;
+        }
+
+        const externalUri = await vscode.env.asExternalUri(
+          vscode.Uri.parse(`http://localhost:${port}`),
+        );
+
+        panel.webview.html = createWebviewHtml(
+          panel.webview,
+          extensionUri,
+          externalUri.toString(),
+        );
+      },
+      undefined,
+      this.disposables,
+    );
   }
 }
 
 function createWebviewHtml(
   webview: vscode.Webview,
   extensionUri: vscode.Uri,
+  previewUrl?: string,
 ): string {
   const nonce = randomBytes(16).toString("base64");
 
@@ -60,6 +93,12 @@ function createWebviewHtml(
   const stylesheetUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, "dist", "webview.css"),
   );
+
+  const frameSource =
+    previewUrl !== undefined ? new URL(previewUrl).origin : "'none'";
+
+  const encodedPreviewUrl =
+    previewUrl !== undefined ? escapeHtmlAttribute(previewUrl) : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -72,6 +111,7 @@ function createWebviewHtml(
         default-src 'none';
         style-src ${webview.cspSource};
         script-src 'nonce-${nonce}';
+        frame-src ${frameSource};
       "
     />
 
@@ -89,7 +129,10 @@ function createWebviewHtml(
   </head>
 
   <body>
-    <div id="root"></div>
+    <div
+      id="root"
+      data-preview-url="${encodedPreviewUrl}"
+    ></div>
 
     <script
       type="module"
@@ -98,4 +141,23 @@ function createWebviewHtml(
     ></script>
   </body>
 </html>`;
+}
+
+function isConnectPreviewMessage(
+  value: unknown,
+): value is { type: "connectPreview" } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    value.type === "connectPreview"
+  );
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }

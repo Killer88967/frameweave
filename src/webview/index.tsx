@@ -2,7 +2,19 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-function App() {
+interface VsCodeApi {
+  postMessage(message: { type: "connectPreview" }): void;
+}
+
+interface AppProps {
+  previewUrl?: string;
+}
+
+declare function acquireVsCodeApi(): VsCodeApi;
+
+const vscode = acquireVsCodeApi();
+
+function App({ previewUrl }: AppProps) {
   return (
     <div className="designer">
       <header className="toolbar">
@@ -51,11 +63,36 @@ function App() {
 
         <div className="canvas-workspace">
           <div className="page-frame">
-            <div className="placeholder">
-              <span className="placeholder-icon">◇</span>
-              <strong>Live application canvas</strong>
-              <p>Select a page or component to begin designing.</p>
-            </div>
+            {previewUrl ? (
+              <iframe
+                className="live-preview"
+                title="Application preview"
+                src={previewUrl}
+              />
+            ) : (
+              <div className="placeholder">
+                <span className="placeholder-icon">◇</span>
+
+                <strong>Live application canvas</strong>
+
+                <p>
+                  Start the development server and connect its port to begin
+                  designing.
+                </p>
+
+                <button
+                  className="connect-button"
+                  type="button"
+                  onClick={() => {
+                    vscode.postMessage({
+                      type: "connectPreview",
+                    });
+                  }}
+                >
+                  Connect preview
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -127,8 +164,10 @@ if (!rootElement) {
   throw new Error("Frameweave webview root was not found.");
 }
 
+const previewUrl = rootElement.dataset.previewUrl || undefined;
+
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <App previewUrl={previewUrl !== undefined ? previewUrl : ""} />
   </StrictMode>,
 );
