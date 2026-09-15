@@ -354,13 +354,30 @@ button:disabled {
   .designer {
     grid-template:
       "toolbar" 42px
-      "canvas" minmax(0, 1fr) /
+      "canvas" minmax(0, 1fr)
+      "properties" clamp(220px, 38vh, 340px) /
       minmax(0, 1fr);
   }
 
-  .layers-panel,
-  .properties-panel {
+  .layers-panel {
     display: none;
+  }
+
+  .properties-panel {
+    display: block;
+    grid-area: properties;
+    min-height: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow-y: auto;
+    border-top: 1px solid var(--vscode-panel-border);
+    border-left: 0;
+  }
+
+  .properties-panel .panel-heading {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--vscode-sideBar-background);
   }
 
   .toolbar {
@@ -390,6 +407,11 @@ button:disabled {
 
   .page-frame {
     width: 100%;
-    min-height: 400px;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .live-preview {
+    min-height: 0;
   }
 }
