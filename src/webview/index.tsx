@@ -201,7 +201,7 @@ function App({ previewUrl }: AppProps) {
 
           <textarea
             value={classNameDraft}
-            disabled={sourceMatch?.classNameEditable}
+            disabled={sourceMatch?.classNameEditable !== true}
             placeholder="Select an editable element"
             spellCheck={false}
             onChange={(event) => {
@@ -210,7 +210,7 @@ function App({ previewUrl }: AppProps) {
             }}
           />
 
-          <div>
+          <div className="property-actions">
             <button
               type="button"
               disabled={
@@ -246,14 +246,20 @@ function App({ previewUrl }: AppProps) {
           </div>
 
           {updateStatus ? (
-            <span>
+            <span
+              className={`update-status ${
+                updateStatus.ok ? "success" : "error"
+              }`}
+            >
               {updateStatus.ok ? "Saved" : "Error: "}
               {updateStatus.message}
             </span>
           ) : null}
 
           {sourceMatch && sourceMatch.classNameEditable !== true ? (
-            <span>Dynamic className expressions are read-only for now.</span>
+            <span className="muted-value">
+              Dynamic className expressions are read-only for now.
+            </span>
           ) : null}
         </section>
 
