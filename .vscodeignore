@@ -1,0 +1,9 @@
+.devcontainers/**
+.github/**
+.vscode/**
+src/**
+.gitignore
+esbuild.mjs
+tsconfig.json
+pnpm-lock.yaml
+**/*.map
