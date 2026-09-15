@@ -25,6 +25,11 @@ const vscode = acquireVsCodeApi();
 function App({ previewUrl }: AppProps) {
   const [selection, setSelection] = useState<ElementSelection | null>(null);
   const [sourceMatch, setSourceMatch] = useState<SourceMatch | null>(null);
+  const [classNameDraft, setClassNameDraft] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -34,6 +39,22 @@ function App({ previewUrl }: AppProps) {
     const receiveMessage = (event: MessageEvent<unknown>): void => {
       if (isSourceResolvedMessage(event.data)) {
         setSourceMatch(event.data.match);
+
+        if (event.data.match?.className !== undefined) {
+          setClassNameDraft(event.data.match.className ?? "");
+        }
+
+        return;
+      }
+
+      if (isSourceUpdatedMessage(event.data)) {
+        setUpdateStatus({
+          ok: event.data.ok,
+          message: event.data.message,
+        });
+
+        if (event.data.match) setSourceMatch(event.data.match);
+
         return;
       }
 
@@ -43,6 +64,8 @@ function App({ previewUrl }: AppProps) {
 
       setSelection(event.data.payload);
       setSourceMatch(null);
+      setClassNameDraft(event.data.payload.classNames.join(" "));
+      setUpdateStatus(null);
       vscode.postMessage({
         type: "resolveSource",
         selection: event.data.payload,
@@ -174,6 +197,67 @@ function App({ previewUrl }: AppProps) {
         </section>
 
         <section>
+          <h2>Tailwind classes</h2>
+
+          <textarea
+            value={classNameDraft}
+            disabled={sourceMatch?.classNameEditable}
+            placeholder="Select an editable element"
+            spellCheck={false}
+            onChange={(event) => {
+              setClassNameDraft(event.target.value);
+              setUpdateStatus(null);
+            }}
+          />
+
+          <div>
+            <button
+              type="button"
+              disabled={
+                !selection ||
+                sourceMatch?.classNameEditable !== true ||
+                classNameDraft === (sourceMatch.className ?? "")
+              }
+              onClick={() => {
+                if (!selection) return;
+
+                setUpdateStatus(null);
+
+                vscode.postMessage({
+                  type: "updateClassName",
+                  selection,
+                  className: classNameDraft.trim(),
+                });
+              }}
+            >
+              Apply classes
+            </button>
+
+            <button
+              type="button"
+              disabled={!sourceMatch}
+              onClick={() => {
+                setClassNameDraft(sourceMatch?.className ?? "");
+                setUpdateStatus(null);
+              }}
+            >
+              Reset
+            </button>
+          </div>
+
+          {updateStatus ? (
+            <span>
+              {updateStatus.ok ? "Saved" : "Error: "}
+              {updateStatus.message}
+            </span>
+          ) : null}
+
+          {sourceMatch && sourceMatch.classNameEditable !== true ? (
+            <span>Dynamic className expressions are read-only for now.</span>
+          ) : null}
+        </section>
+
+        <section>
           <h2>Layout</h2>
 
           <div className="property-grid">
@@ -256,12 +340,26 @@ function isSelectedMessage(value: unknown): value is PreviewSelectionMessage {
 
 function isSourceResolvedMessage(
   value: unknown,
-): value is ExtensionToWebviewMessage {
+): value is Extract<ExtensionToWebviewMessage, { type: "sourceResolved" }> {
   return (
     typeof value === "object" &&
     value !== null &&
     "type" in value &&
     value.type === "sourceResolved" &&
+    "match" in value
+  );
+}
+
+function isSourceUpdatedMessage(
+  value: unknown,
+): value is Extract<ExtensionToWebviewMessage, { type: "sourceUpdated" }> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    value.type === "sourceUpdated" &&
+    "ok" in value &&
+    "message" in value &&
     "match" in value
   );
 }
