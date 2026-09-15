@@ -2,7 +2,7 @@ import * as esbuild from "esbuild";
 
 const watch = process.argv.includes("--watch");
 
-const buildOptions = {
+const extensionOptions = {
   entryPoints: ["src/extension.ts"],
   outfile: "dist/extension.cjs",
   bundle: true,
@@ -15,12 +15,29 @@ const buildOptions = {
   logLevel: "info",
 };
 
+const webviewOptions = {
+  entryPoints: ["src/webview/index.tsx"],
+  outfile: "dist/webview.js",
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  sourcemap: true,
+  sourcesContent: false,
+  logLevel: "info",
+};
+
 if (watch) {
-  const context = await esbuild.context(buildOptions);
+  const extensionContext = await esbuild.context(extensionOptions);
 
-  await context.watch();
+  const webviewContext = await esbuild.context(webviewOptions);
 
-  console.log("Watching Frameweave extension files...");
+  await Promise.all([extensionContext.watch(), webviewContext.watch()]);
+
+  console.log("Watching Frameweave files...");
 } else {
-  await esbuild.build(buildOptions);
+  await Promise.all([
+    esbuild.build(extensionOptions),
+    esbuild.build(webviewOptions),
+  ]);
 }

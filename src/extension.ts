@@ -4,6 +4,7 @@ import { createDefaultAdapterRegistry } from "./adapters/index.js";
 import { ProjectDetector } from "./detection/projectDetector.js";
 // import type { WorkspaceProfile } from "./profile/types.js";
 import { ProjectProfileProvider } from "./views/projectProfileProvider.js";
+import { DesignerPanel } from "./designer/designerPanel.js";
 
 export async function activate(
   context: vscode.ExtensionContext,
@@ -30,16 +31,9 @@ export async function activate(
     projectProfileProvider.setProfiles(profiles);
   };
 
-  const openCommand = vscode.commands.registerCommand(
-    "frameweave.open",
-    async () => {
-      await vscode.commands.executeCommand(
-        "workbench.view.extension.frameweave",
-      );
-
-      await refreshProjectProfile();
-    },
-  );
+  const openCommand = vscode.commands.registerCommand("frameweave.open", () => {
+    DesignerPanel.createOrShow(context.extensionUri);
+  });
 
   const refreshCommand = vscode.commands.registerCommand(
     "frameweave.refreshProjectProfile",
