@@ -65,10 +65,15 @@
             tagName: element.tagName.toLowerCase(),
             id: element.id,
             classNames: [...element.classList],
-            text: element.textContent
-              ?.trim()
-              .replace(/\s+/g, " ")
-              .slice(0, 120),
+            text:
+              element.textContent?.trim().replace(/\s+/g, " ").slice(0, 120) ??
+              null,
+            attributes: Object.fromEntries(
+              [...element.attributes].map((attribute) => [
+                attribute.name,
+                attribute.value,
+              ]),
+            ),
             rectangle: {
               x: rectangle.x,
               y: rectangle.y,

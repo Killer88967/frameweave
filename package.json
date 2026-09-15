@@ -75,10 +75,11 @@
     "check": "tsc --noEmit",
     "package": "pnpm build && vsce package --out frameweave.vsix",
     "install:local": "pnpm package && code --install-extension frameweave.vsix --force",
-
     "dev:v4": "pnpm --filter @frameweave/example-next-tailwind-v4 dev"
   },
   "devDependencies": {
+    "@babel/parser": "^8.0.5",
+    "@babel/types": "^8.0.5",
     "@types/node": "latest",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
-
 import * as vscode from "vscode";
+
+import { resolveElementSource } from "../source/sourceResolver.js";
+import type { WebviewToExtensionMessage } from "../shared/protocol.js";
 
 export class DesignerPanel {
   static currentPanel: DesignerPanel | undefined;
@@ -47,7 +49,15 @@ export class DesignerPanel {
 
     panel.webview.onDidReceiveMessage(
       async (message: unknown) => {
-        if (!isConnectPreviewMessage(message)) {
+        if (!isWebviewMessage(message)) return;
+
+        if (message.type === "resolveSource") {
+          const match = await resolveElementSource(message.selection);
+
+          await panel.webview.postMessage({
+            type: "sourceResolved",
+            match,
+          });
           return;
         }
 
@@ -147,15 +157,14 @@ function createWebviewHtml(
 </html>`;
 }
 
-function isConnectPreviewMessage(
-  value: unknown,
-): value is { type: "connectPreview" } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    value.type === "connectPreview"
-  );
+function isWebviewMessage(value: unknown): value is WebviewToExtensionMessage {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+
+  if (value.type === "connectPreview") return true;
+
+  return value.type === "resolveSource" && "selection" in value;
 }
 
 function escapeHtmlAttribute(value: string): string {

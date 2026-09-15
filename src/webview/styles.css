@@ -213,6 +213,25 @@ button:hover {
   font-weight: 600;
 }
 
+.source-details {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.source-details strong,
+.source-details span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-details span,
+.muted-value {
+  color: var(--vscode-descriptionForeground);
+}
+
 .properties-panel label {
   display: grid;
   gap: 5px;

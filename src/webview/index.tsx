@@ -1,41 +1,21 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+
+import type {
+  ElementSelection,
+  ExtensionToWebviewMessage,
+  PreviewSelectionMessage,
+  SourceMatch,
+  WebviewToExtensionMessage,
+} from "../shared/protocol.js";
 import "./styles.css";
 
 interface VsCodeApi {
-  postMessage(message: { type: "connectPreview" }): void;
+  postMessage(message: WebviewToExtensionMessage): void;
 }
 
 interface AppProps {
   previewUrl?: string;
-}
-
-interface ElementSelection {
-  tagName: string;
-  id: string;
-  classNames: string[];
-  text?: string;
-  rectangle: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  styles: {
-    display: string;
-    position: string;
-    padding: string;
-    gap: string;
-    color: string;
-    backgroundColor: string;
-    fontSize: string;
-  };
-}
-
-interface SelectionMessage {
-  source: "frameweave-preview";
-  type: "element-selected";
-  payload: ElementSelection;
 }
 
 declare function acquireVsCodeApi(): VsCodeApi;
@@ -44,6 +24,7 @@ const vscode = acquireVsCodeApi();
 
 function App({ previewUrl }: AppProps) {
   const [selection, setSelection] = useState<ElementSelection | null>(null);
+  const [sourceMatch, setSourceMatch] = useState<SourceMatch | null>(null);
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -51,10 +32,21 @@ function App({ previewUrl }: AppProps) {
     const previewOrigin = new URL(previewUrl).origin;
 
     const receiveMessage = (event: MessageEvent<unknown>): void => {
-      if (event.origin !== previewOrigin) return;
-      if (!isSelectedMessage(event.data)) return;
+      if (isSourceResolvedMessage(event.data)) {
+        setSourceMatch(event.data.match);
+        return;
+      }
+
+      if (event.origin !== previewOrigin || !isSelectedMessage(event.data)) {
+        return;
+      }
 
       setSelection(event.data.payload);
+      setSourceMatch(null);
+      vscode.postMessage({
+        type: "resolveSource",
+        selection: event.data.payload,
+      });
     };
 
     window.addEventListener("message", receiveMessage);
@@ -73,8 +65,12 @@ function App({ previewUrl }: AppProps) {
           <button type="button">Mobile</button>
         </div>
 
-        <button className="preview-button" type="button">
-          Preview
+        <button
+          className="preview-button"
+          type="button"
+          onClick={() => vscode.postMessage({ type: "connectPreview" })}
+        >
+          {previewUrl ? "Reconnect" : "Connect preview"}
         </button>
       </header>
 
@@ -99,14 +95,18 @@ function App({ previewUrl }: AppProps) {
         <div className="layer deeply-nested">
           <span>◇</span>
           <span>
-            {selection ? `<${selection.tagName}>` : "No element selected"}
+            {sourceMatch?.componentName ??
+              (selection ? `<${selection.tagName}>` : "No element selected")}
           </span>
         </div>
       </aside>
 
       <main className="canvas">
         <div className="canvas-header">
-          {selection ? `<${selection.tagName}>` : "No element selected"}
+          <span>
+            {sourceMatch?.componentName ??
+              (selection ? `<${selection.tagName}>` : "No element selected")}
+          </span>
           <span>100%</span>
         </div>
 
@@ -150,6 +150,30 @@ function App({ previewUrl }: AppProps) {
         <div className="panel-heading">
           <span>Properties</span>
         </div>
+
+        <section>
+          <h2>Source</h2>
+
+          {sourceMatch ? (
+            <div className="source-details">
+              <strong>{sourceMatch.componentName}</strong>
+              <span>
+                Rendered as &lt;{sourceMatch.renderedTagName}&gt;
+              </span>
+              <span>
+                {sourceMatch.filePath}:{sourceMatch.line}:{sourceMatch.column}
+              </span>
+              {sourceMatch.importSource ? (
+                <span>Import: {sourceMatch.importSource}</span>
+              ) : null}
+              <span>Confidence: {sourceMatch.confidence}</span>
+            </div>
+          ) : (
+            <span className="muted-value">
+              {selection ? "Resolving source…" : "No element selected"}
+            </span>
+          )}
+        </section>
 
         <section>
           <h2>Layout</h2>
@@ -220,7 +244,7 @@ function App({ previewUrl }: AppProps) {
   );
 }
 
-function isSelectedMessage(value: unknown): value is SelectionMessage {
+function isSelectedMessage(value: unknown): value is PreviewSelectionMessage {
   if (typeof value !== "object" || value === null) return false;
 
   return (
@@ -229,6 +253,18 @@ function isSelectedMessage(value: unknown): value is SelectionMessage {
     "type" in value &&
     value.type === "element-selected" &&
     "payload" in value
+  );
+}
+
+function isSourceResolvedMessage(
+  value: unknown,
+): value is ExtensionToWebviewMessage {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    value.type === "sourceResolved" &&
+    "match" in value
   );
 }
 
