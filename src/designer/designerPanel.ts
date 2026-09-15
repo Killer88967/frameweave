@@ -67,10 +67,14 @@ export class DesignerPanel {
           vscode.Uri.parse(`http://localhost:${port}`),
         );
 
+        const previewUrl = new URL(externalUri.toString());
+
+        previewUrl.searchParams.set("__frameweave", "1");
+
         panel.webview.html = createWebviewHtml(
           panel.webview,
           extensionUri,
-          externalUri.toString(),
+          previewUrl.toString(),
         );
       },
       undefined,

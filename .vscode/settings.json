@@ -26,8 +26,7 @@
   "terminal.integrated.defaultProfile.linux": "zsh",
   "terminal.integrated.fontFamily": "monospace",
 
-  "js/ts.tsdk.path": "node_modules/typescript/lib",
-  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+  "js/ts.experimental.useTsgo": true,
 
   "chat.mcp.gallery.enabled": true,
   "chat.mcp.access": "all",
@@ -51,7 +50,7 @@
   "[github-actions-workflow]": {
     "editor.defaultFormatter": "redhat.vscode-yaml"
   },
-  
+
   "[xml]": {
     "editor.defaultFormatter": "redhat.vscode-xml"
   }

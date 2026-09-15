@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
@@ -10,11 +10,58 @@ interface AppProps {
   previewUrl?: string;
 }
 
+interface ElementSelection {
+  tagName: string;
+  id: string;
+  classNames: string[];
+  text?: string;
+  rectangle: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  styles: {
+    display: string;
+    position: string;
+    padding: string;
+    gap: string;
+    color: string;
+    backgroundColor: string;
+    fontSize: string;
+  };
+}
+
+interface SelectionMessage {
+  source: "frameweave-preview";
+  type: "element-selected";
+  payload: ElementSelection;
+}
+
 declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
 
 function App({ previewUrl }: AppProps) {
+  const [selection, setSelection] = useState<ElementSelection | null>(null);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+
+    const previewOrigin = new URL(previewUrl).origin;
+
+    const receiveMessage = (event: MessageEvent<unknown>): void => {
+      if (event.origin !== previewOrigin) return;
+      if (!isSelectedMessage(event.data)) return;
+
+      setSelection(event.data.payload);
+    };
+
+    window.addEventListener("message", receiveMessage);
+
+    return () => window.removeEventListener("message", receiveMessage);
+  }, [previewUrl]);
+
   return (
     <div className="designer">
       <header className="toolbar">
@@ -51,13 +98,15 @@ function App({ previewUrl }: AppProps) {
 
         <div className="layer deeply-nested">
           <span>◇</span>
-          <span>Selected element</span>
+          <span>
+            {selection ? `<${selection.tagName}>` : "No element selected"}
+          </span>
         </div>
       </aside>
 
       <main className="canvas">
         <div className="canvas-header">
-          <span>No page selected</span>
+          {selection ? `<${selection.tagName}>` : "No element selected"}
           <span>100%</span>
         </div>
 
@@ -108,12 +157,22 @@ function App({ previewUrl }: AppProps) {
           <div className="property-grid">
             <label>
               W
-              <input value="Auto" readOnly />
+              <input
+                value={
+                  selection ? Math.round(selection.rectangle.width) : "Auto"
+                }
+                readOnly
+              />
             </label>
 
             <label>
               H
-              <input value="Auto" readOnly />
+              <input
+                value={
+                  selection ? Math.round(selection.rectangle.height) : "Auto"
+                }
+                readOnly
+              />
             </label>
           </div>
         </section>
@@ -124,12 +183,12 @@ function App({ previewUrl }: AppProps) {
           <div className="property-grid">
             <label>
               Padding
-              <input value="0" readOnly />
+              <input value={selection?.styles.padding ?? "0px"} readOnly />
             </label>
 
             <label>
               Gap
-              <input value="0" readOnly />
+              <input value={selection?.styles.gap ?? "normal"} readOnly />
             </label>
           </div>
         </section>
@@ -141,7 +200,10 @@ function App({ previewUrl }: AppProps) {
             Background
             <div className="color-property">
               <span />
-              <input value="#18181b" readOnly />
+              <input
+                value={selection?.styles.backgroundColor ?? "transparent"}
+                readOnly
+              />
             </div>
           </label>
         </section>
@@ -155,6 +217,18 @@ function App({ previewUrl }: AppProps) {
         </section>
       </aside>
     </div>
+  );
+}
+
+function isSelectedMessage(value: unknown): value is SelectionMessage {
+  if (typeof value !== "object" || value === null) return false;
+
+  return (
+    "source" in value &&
+    value.source === "frameweave-preview" &&
+    "type" in value &&
+    value.type === "element-selected" &&
+    "payload" in value
   );
 }
 
