@@ -1,4 +1,4 @@
-.devcontainers/**
+.devcontainer/**
 .github/**
 .vscode/**
 src/**
