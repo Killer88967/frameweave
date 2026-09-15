@@ -1,0 +1,52 @@
+{
+  "name": "frameweave",
+  "displayName": "Frameweave",
+  "description": "Visually understand and shape your framework's UI.",
+  "version": "0.0.1",
+  "publisher": "Killer88967",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "visual",
+    "framework",
+    "components",
+    "react",
+    "nextjs",
+    "tailwindcss"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Killer88967/frameweave.git"
+  },
+  "main": "./dist/extension.cjs",
+  "contributes": {
+    "commands": [
+      {
+        "command": "frameweave.open",
+        "title": "Open Frameweave",
+        "category": "Frameweave"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "pnpm check && node esbuild.mjs",
+    "watch": "concurrently --kill-others --names types,build \"tsc --noEmit --watch --preserveWatchOutput\" \"node esbuild.mjs --watch\"",
+    "check": "tsc --noEmit",
+    "package": "pnpm build && vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/vscode": "^1.100.0",
+    "concurrently": "latest",
+    "esbuild": "latest",
+    "typescript": "latest"
+  }
+}
