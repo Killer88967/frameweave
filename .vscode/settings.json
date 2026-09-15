@@ -24,10 +24,10 @@
   "workbench.iconTheme": "vscode-icons",
 
   "terminal.integrated.defaultProfile.linux": "zsh",
-  "terminal.integrated.fontFamily": "FiraCode Nerd Font",
+  "terminal.integrated.fontFamily": "monospace",
 
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
 
   "chat.mcp.gallery.enabled": true,
   "chat.mcp.access": "all",
@@ -39,11 +39,11 @@
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  
+
   "[jsonc]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  
+
   "[typescript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
