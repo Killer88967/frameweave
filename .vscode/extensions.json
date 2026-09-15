@@ -7,6 +7,7 @@
     "ultram4rine.vscode-choosealicense",
     "dbaeumer.vscode-eslint",
     "redhat.vscode-yaml",
+    "redhat.vscode-xml",
     "ms-vscode.extension-test-runner"
   ],
   "unwantedRecommendations": [

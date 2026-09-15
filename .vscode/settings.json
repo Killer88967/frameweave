@@ -50,5 +50,9 @@
 
   "[github-actions-workflow]": {
     "editor.defaultFormatter": "redhat.vscode-yaml"
+  },
+  
+  "[xml]": {
+    "editor.defaultFormatter": "redhat.vscode-xml"
   }
 }

@@ -33,8 +33,41 @@
         "command": "frameweave.open",
         "title": "Open Frameweave",
         "category": "Frameweave"
+      },
+      {
+        "command": "frameweave.refreshProjectProfile",
+        "title": "Refresh Project Profile",
+        "category": "Frameweave",
+        "icon": "$(refresh)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "frameweave",
+          "title": "Frameweave",
+          "icon": "media//frameweave.svg"
+        }
+      ]
+    },
+    "views": {
+      "frameweave": [
+        {
+          "id": "frameweave.projectProfile",
+          "name": "Project Profile",
+          "icon": "media/project-profile.svg"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "frameweave.refreshProjectProfile",
+          "when": "view == frameweave.projectProfile",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "pnpm check && node esbuild.mjs",
