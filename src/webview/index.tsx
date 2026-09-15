@@ -157,9 +157,7 @@ function App({ previewUrl }: AppProps) {
           {sourceMatch ? (
             <div className="source-details">
               <strong>{sourceMatch.componentName}</strong>
-              <span>
-                Rendered as &lt;{sourceMatch.renderedTagName}&gt;
-              </span>
+              <span>Rendered as &lt;{sourceMatch.renderedTagName}&gt;</span>
               <span>
                 {sourceMatch.filePath}:{sourceMatch.line}:{sourceMatch.column}
               </span>

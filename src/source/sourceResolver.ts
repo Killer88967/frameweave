@@ -56,6 +56,67 @@ export async function resolveElementSource(
   return best.match;
 }
 
+export async function updateElementClassName(
+  selection: ElementSelection,
+  className: string,
+): Promise<SourceMatch | null> {
+  const match = await resolveElementSource(selection);
+
+  if (!match || match.classNameEditable !== true) return null;
+
+  const uri = await findSourceUri(match.filePath);
+
+  if (!uri) return null;
+
+  const document = await vscode.workspace.openTextDocument(uri);
+
+  // Avoid overwriting changes the user is currently making.
+  if (document.isDirty) return null;
+
+  const element = findOpeningElement(document.getText(), match);
+
+  if (!element) return null;
+
+  const classNameAttribute = findClassNameAttribute(element);
+  const staticAttributes = readStaticAttributes(element);
+
+  if (classNameAttribute !== undefined && !staticAttributes.has("className"))
+    return null;
+
+  const replacement = `className={${JSON.stringify(className)}}`;
+  const edit = new vscode.WorkspaceEdit();
+
+  if (classNameAttribute) {
+    const range = readNodeRange(classNameAttribute);
+
+    if (!range) return null;
+
+    edit.replace(
+      uri,
+      new vscode.Range(
+        document.positionAt(range.start),
+        document.positionAt(range.end),
+      ),
+      replacement,
+    );
+  } else {
+    if (element.end === null || element.end === undefined) return null;
+
+    const insertionOffset = element.end - (element.selfClosing ? 2 : 1);
+
+    edit.insert(uri, document.positionAt(insertionOffset), ` ${replacement}`);
+  }
+
+  const applied = await vscode.workspace.applyEdit(edit);
+
+  if (!applied || !(await document.save())) return null;
+
+  return {
+    ...match,
+    className,
+  };
+}
+
 function collectImports(file: t.File): Map<string, string> {
   const imports = new Map<string, string>();
 
@@ -68,6 +129,72 @@ function collectImports(file: t.File): Map<string, string> {
   }
 
   return imports;
+}
+
+async function findSourceUri(
+  relativeFilePath: string,
+): Promise<vscode.Uri | null> {
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+
+  for (const folder of workspaceFolders) {
+    const folderPrefix = `${folder.name}/`;
+
+    const pathInsideFolder = relativeFilePath.startsWith(folderPrefix)
+      ? relativeFilePath.slice(folderPrefix.length)
+      : relativeFilePath;
+
+    const uri = vscode.Uri.joinPath(folder.uri, ...pathInsideFolder.split("/"));
+
+    try {
+      await vscode.workspace.fs.stat(uri);
+      return uri;
+    } catch {
+      // Try the next workspace folder.
+    }
+  }
+
+  return null;
+}
+
+function findOpeningElement(
+  source: string,
+  match: SourceMatch,
+): t.JSXOpeningElement | null {
+  const file = parse(source, {
+    sourceType: "unambiguous",
+    plugins: ["jsx", "typescript"],
+    errorRecovery: true,
+  });
+
+  let result: t.JSXOpeningElement | null = null;
+
+  visit(file.program, (node) => {
+    if (!t.isJSXOpeningElement(node) || !node.loc) return;
+    if (
+      node.loc.start.line === match.line &&
+      node.loc.start.column + 1 === match.column
+    ) {
+      result = node;
+    }
+  });
+
+  return result;
+}
+
+function readNodeRange(node: t.Node): { start: number; end: number } | null {
+  if (
+    node.start === null ||
+    node.start === undefined ||
+    node.end === null ||
+    node.end === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    start: node.start,
+    end: node.end,
+  };
 }
 
 function visit(node: t.Node, callback: (node: t.Node) => void): void {
