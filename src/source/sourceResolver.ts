@@ -112,6 +112,10 @@ function scoreElement(
 
   let score = intrinsic || isNextImage ? 6 : 1;
   const attributes = readStaticAttributes(node);
+  const classNameAttribute = findClassNameAttribute(node);
+  const className = attributes.get("className") ?? null;
+  const classNameEditable =
+    classNameAttribute === undefined || className !== null;
 
   score += scoreExactAttribute(attributes, selection.attributes, "id", 10);
   score += scoreExactAttribute(attributes, selection.attributes, "alt", 8);
@@ -132,6 +136,8 @@ function scoreElement(
       line: position.line,
       column: position.column + 1,
       confidence: score >= 20 ? "high" : score >= 12 ? "medium" : "low",
+      className,
+      classNameEditable,
     },
   };
 }
@@ -143,6 +149,17 @@ function readElementName(name: t.JSXOpeningElement["name"]): string {
   }
 
   return `${readElementName(name.object)}.${name.property.name}`;
+}
+
+function findClassNameAttribute(
+  node: t.JSXOpeningElement,
+): t.JSXAttribute | undefined {
+  return node.attributes.find(
+    (attribute): attribute is t.JSXAttribute =>
+      t.isJSXAttribute(attribute) &&
+      t.isJSXIdentifier(attribute.name) &&
+      attribute.name.name === "className",
+  );
 }
 
 function readStaticAttributes(node: t.JSXOpeningElement): Map<string, string> {
