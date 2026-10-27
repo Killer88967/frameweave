@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 
 import {
+  openSourceMatch,
   resolveElementSource,
   updateElementClassName,
 } from "../source/sourceResolver.js";
@@ -64,20 +65,29 @@ export class DesignerPanel {
           return;
         }
 
+        if (message.type === "openSource") {
+          try {
+            await openSourceMatch(message.match);
+          } catch (error) {
+            void vscode.window.showErrorMessage(
+              error instanceof Error ? error.message : String(error),
+            );
+
+            return;
+          }
+        }
+
         if (message.type === "updateClassName") {
           try {
             const match = await updateElementClassName(
-              message.selection,
+              message.match,
               message.className,
             );
 
             await panel.webview.postMessage({
               type: "sourceUpdated",
-              ok: match !== null,
-              message:
-                match !== null
-                  ? "Classes saved. Waiting for the preview to updated..."
-                  : "Frameweave could not safely edit this className.",
+              ok: true,
+              message: "Classes saved. Waiting for the preview to update…",
               match,
             });
           } catch (error) {
@@ -94,6 +104,8 @@ export class DesignerPanel {
 
           return;
         }
+
+        if (message.type !== "connectPreview") return;
 
         const port = await vscode.window.showInputBox({
           title: "Connect Frameweave Preview",
@@ -196,10 +208,11 @@ function isWebviewMessage(value: unknown): value is WebviewToExtensionMessage {
     return false;
   if (value.type === "connectPreview") return true;
   if (value.type === "resolveSource") return "selection" in value;
+  if (value.type === "openSource") return "match" in value;
 
   return (
     value.type === "updateClassName" &&
-    "selection" in value &&
+    "match" in value &&
     "className" in value &&
     typeof value.className === "string"
   );

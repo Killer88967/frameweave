@@ -188,6 +188,14 @@ function App({ previewUrl }: AppProps) {
                 <span>Import: {sourceMatch.importSource}</span>
               ) : null}
               <span>Confidence: {sourceMatch.confidence}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  vscode.postMessage({ type: "openSource", match: sourceMatch })
+                }
+              >
+                Open in editor
+              </button>
             </div>
           ) : (
             <span className="muted-value">
@@ -214,19 +222,19 @@ function App({ previewUrl }: AppProps) {
             <button
               type="button"
               disabled={
-                !selection ||
-                sourceMatch?.classNameEditable !== true ||
+                !sourceMatch ||
+                sourceMatch.classNameEditable !== true ||
                 classNameDraft === (sourceMatch.className ?? "")
               }
               onClick={() => {
-                if (!selection) return;
+                if (!sourceMatch) return;
 
                 setUpdateStatus(null);
 
                 vscode.postMessage({
                   type: "updateClassName",
-                  selection,
-                  className: classNameDraft.trim(),
+                  match: sourceMatch,
+                  className: classNameDraft.trim().replace(/\s+/g, " "),
                 });
               }}
             >
@@ -251,7 +259,6 @@ function App({ previewUrl }: AppProps) {
                 updateStatus.ok ? "success" : "error"
               }`}
             >
-              {updateStatus.ok ? "Saved" : "Error: "}
               {updateStatus.message}
             </span>
           ) : null}

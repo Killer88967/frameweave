@@ -2,7 +2,11 @@ import { parse } from "@babel/parser";
 import * as t from "@babel/types";
 import * as vscode from "vscode";
 
-import type { ElementSelection, SourceMatch } from "../shared/protocol.js";
+import type {
+  ElementSelection,
+  SourceLocation,
+  SourceMatch,
+} from "../shared/protocol.js";
 
 interface Candidate {
   match: SourceMatch;
@@ -10,6 +14,70 @@ interface Candidate {
 }
 
 export async function resolveElementSource(
+  selection: ElementSelection,
+): Promise<SourceMatch | null> {
+  if (selection.sourceLocation) {
+    const exact = await resolveFromLocation(
+      selection,
+      selection.sourceLocation,
+    );
+
+    if (exact) return exact;
+  }
+
+  return guessElementSource(selection);
+}
+
+/**
+ * Fast path: the app was started with @frameweave/next, so the clicked
+ * element already says which file, line and column it came from.
+ */
+async function resolveFromLocation(
+  selection: ElementSelection,
+  location: SourceLocation,
+): Promise<SourceMatch | null> {
+  const uri = vscode.Uri.file(location.filePath);
+
+  let text: string;
+
+  try {
+    text = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+  } catch {
+    return null;
+  }
+
+  const file = parse(text, {
+    sourceType: "unambiguous",
+    plugins: ["jsx", "typescript"],
+    errorRecovery: true,
+  });
+
+  const filePath = vscode.workspace.asRelativePath(uri, false);
+  const element = findOpeningElement(file, location.line, location.column);
+
+  if (!element) return null;
+
+  // The stamp may belong to an ancestor (when the click landed inside a
+  // node_modules component), so the tag names are not required to match.
+  const componentName = readElementName(element.name);
+  const className = readStaticAttributes(element).get("className") ?? null;
+
+  return {
+    componentName,
+    renderedTagName: selection.tagName,
+    importSource: null,
+    filePath,
+    line: location.line,
+    column: location.column,
+    confidence: "exact",
+    className,
+    classNameEditable:
+      findClassNameAttribute(element) === undefined || className !== null,
+  };
+}
+
+/** Fallback for apps without @frameweave/next: score every JSX element. */
+async function guessElementSource(
   selection: ElementSelection,
 ): Promise<SourceMatch | null> {
   const files = await vscode.workspace.findFiles(
@@ -56,65 +124,165 @@ export async function resolveElementSource(
   return best.match;
 }
 
-export async function updateElementClassName(
-  selection: ElementSelection,
-  className: string,
-): Promise<SourceMatch | null> {
-  const match = await resolveElementSource(selection);
+export async function openSourceMatch(match: SourceMatch): Promise<void> {
+  const uri = await findSourceUri(match.filePath);
 
-  if (!match || match.classNameEditable !== true) return null;
+  if (!uri) throw new Error(`Could not find ${match.filePath}.`);
+
+  const position = new vscode.Position(
+    Math.max(0, match.line - 1),
+    Math.max(0, match.column - 1),
+  );
+
+  // Open beside the designer so the canvas stays visible.
+  await vscode.window.showTextDocument(uri, {
+    viewColumn: vscode.ViewColumn.Beside,
+    selection: new vscode.Range(position, position),
+    preserveFocus: false,
+  });
+}
+
+/**
+ * Updates the className of an already-resolved element. Throws with a
+ * user-facing message when the edit would not be safe.
+ */
+export async function updateElementClassName(
+  match: SourceMatch,
+  className: string,
+): Promise<SourceMatch> {
+  if (match.classNameEditable !== true) {
+    throw new Error("Dynamic className expressions are read-only for now.");
+  }
 
   const uri = await findSourceUri(match.filePath);
 
-  if (!uri) return null;
+  if (!uri) throw new Error(`Could not find ${match.filePath}.`);
 
   const document = await vscode.workspace.openTextDocument(uri);
 
   // Avoid overwriting changes the user is currently making.
-  if (document.isDirty) return null;
+  if (document.isDirty) {
+    throw new Error(
+      `${match.filePath} has unsaved changes. Save it, then apply again.`,
+    );
+  }
 
-  const element = findOpeningElement(document.getText(), match);
+  const source = document.getText();
+  const element = findOpeningElement(
+    parse(source, {
+      sourceType: "unambiguous",
+      plugins: ["jsx", "typescript"],
+      errorRecovery: true,
+    }),
+    match.line,
+    match.column,
+  );
 
-  if (!element) return null;
+  if (!element) {
+    throw new Error(
+      "The element moved since it was selected. Select it again.",
+    );
+  }
 
   const classNameAttribute = findClassNameAttribute(element);
-  const staticAttributes = readStaticAttributes(element);
-
-  if (classNameAttribute !== undefined && !staticAttributes.has("className"))
-    return null;
-
-  const replacement = `className={${JSON.stringify(className)}}`;
   const edit = new vscode.WorkspaceEdit();
 
   if (classNameAttribute) {
-    const range = readNodeRange(classNameAttribute);
+    const change = buildClassNameValueEdit(
+      source,
+      classNameAttribute,
+      className,
+    );
 
-    if (!range) return null;
+    if (!change) {
+      throw new Error("Dynamic className expressions are read-only for now.");
+    }
 
     edit.replace(
       uri,
       new vscode.Range(
-        document.positionAt(range.start),
-        document.positionAt(range.end),
+        document.positionAt(change.start),
+        document.positionAt(change.end),
       ),
-      replacement,
+      change.text,
     );
   } else {
-    if (element.end === null || element.end === undefined) return null;
+    if (element.end === null || element.end === undefined) {
+      throw new Error("Could not find where to add className.");
+    }
 
     const insertionOffset = element.end - (element.selfClosing ? 2 : 1);
+    const value = className.includes('"')
+      ? `{${JSON.stringify(className)}}`
+      : `"${className}"`;
 
-    edit.insert(uri, document.positionAt(insertionOffset), ` ${replacement}`);
+    edit.insert(
+      uri,
+      document.positionAt(insertionOffset),
+      ` className=${value}`,
+    );
   }
 
   const applied = await vscode.workspace.applyEdit(edit);
 
-  if (!applied || !(await document.save())) return null;
+  if (!applied || !(await document.save())) {
+    throw new Error(`Could not save ${match.filePath}.`);
+  }
 
   return {
     ...match,
     className,
   };
+}
+
+/**
+ * Replaces only the className value and keeps the author's style:
+ * className="a" stays a quoted string, className={"a"} / {`a`} stay
+ * expressions. Returns null for dynamic values (cn(...), variables, ...).
+ */
+function buildClassNameValueEdit(
+  source: string,
+  attribute: t.JSXAttribute,
+  className: string,
+): { start: number; end: number; text: string } | null {
+  const value = attribute.value;
+
+  if (t.isStringLiteral(value)) {
+    const range = readNodeRange(value);
+
+    if (!range) return null;
+
+    const quote = source[range.start] === "'" ? "'" : '"';
+
+    return {
+      ...range,
+      text: className.includes(quote)
+        ? `{${JSON.stringify(className)}}`
+        : `${quote}${className}${quote}`,
+    };
+  }
+
+  if (!t.isJSXExpressionContainer(value)) return null;
+
+  const expression = value.expression;
+  const range = readNodeRange(expression);
+
+  if (!range) return null;
+
+  if (t.isStringLiteral(expression)) {
+    return { ...range, text: JSON.stringify(className) };
+  }
+
+  if (t.isTemplateLiteral(expression) && expression.expressions.length === 0) {
+    const needsEscaping = /[`\\]|\$\{/.test(className);
+
+    return {
+      ...range,
+      text: needsEscaping ? JSON.stringify(className) : `\`${className}\``,
+    };
+  }
+
+  return null;
 }
 
 function collectImports(file: t.File): Map<string, string> {
@@ -135,6 +303,17 @@ async function findSourceUri(
   relativeFilePath: string,
 ): Promise<vscode.Uri | null> {
   const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+
+  if (relativeFilePath.startsWith("/")) {
+    const uri = vscode.Uri.file(relativeFilePath);
+
+    try {
+      await vscode.workspace.fs.stat(uri);
+      return uri;
+    } catch {
+      return null;
+    }
+  }
 
   for (const folder of workspaceFolders) {
     const folderPrefix = `${folder.name}/`;
@@ -157,23 +336,15 @@ async function findSourceUri(
 }
 
 function findOpeningElement(
-  source: string,
-  match: SourceMatch,
+  file: t.File,
+  line: number,
+  column: number,
 ): t.JSXOpeningElement | null {
-  const file = parse(source, {
-    sourceType: "unambiguous",
-    plugins: ["jsx", "typescript"],
-    errorRecovery: true,
-  });
-
   let result: t.JSXOpeningElement | null = null;
 
   visit(file.program, (node) => {
     if (!t.isJSXOpeningElement(node) || !node.loc) return;
-    if (
-      node.loc.start.line === match.line &&
-      node.loc.start.column + 1 === match.column
-    ) {
+    if (node.loc.start.line === line && node.loc.start.column + 1 === column) {
       result = node;
     }
   });

@@ -4,4 +4,5 @@ allowBuilds:
   unrs-resolver: true
 
 packages:
-  - "apps/next-tailwind-v4/**"
+  - "apps/**"
+  - "packages/**"

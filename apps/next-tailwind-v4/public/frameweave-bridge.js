@@ -19,6 +19,22 @@
 
   let activeElement;
 
+  // Set by @frameweave/next in dev: "<absolute file>:<line>:<column>".
+  // Elements rendered by node_modules have no stamp, so fall back to the
+  // nearest ancestor that came from the app's own source.
+  function readSourceLocation(element) {
+    const value = element.closest("[data-fw-loc]")?.getAttribute("data-fw-loc");
+    const match = value?.match(/^(.*):(\d+):(\d+)$/);
+
+    if (!match) return null;
+
+    return {
+      filePath: match[1],
+      line: Number(match[2]),
+      column: Number(match[3]),
+    };
+  }
+
   function updateOverlay(element) {
     activeElement = element;
 
@@ -69,11 +85,11 @@
               element.textContent?.trim().replace(/\s+/g, " ").slice(0, 120) ??
               null,
             attributes: Object.fromEntries(
-              [...element.attributes].map((attribute) => [
-                attribute.name,
-                attribute.value,
-              ]),
+              [...element.attributes]
+                .filter((attribute) => attribute.name !== "data-fw-loc")
+                .map((attribute) => [attribute.name, attribute.value]),
             ),
+            sourceLocation: readSourceLocation(element),
             rectangle: {
               x: rectangle.x,
               y: rectangle.y,

@@ -1,0 +1,20 @@
+{
+  "name": "@frameweave/next",
+  "version": "0.0.1",
+  "description": "Dev-only Next.js integration that lets Frameweave map rendered elements to exact source locations.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./loader": "./loader.cjs"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "index.cjs"
+  ],
+  "types": "./index.d.ts",
+  "dependencies": {
+    "@babel/parser": "^8.0.8"
+  }
+}

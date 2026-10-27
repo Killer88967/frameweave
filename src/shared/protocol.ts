@@ -1,9 +1,18 @@
+export interface SourceLocation {
+  /** Absolute path, as stamped by @frameweave/next. */
+  filePath: string;
+  line: number;
+  column: number;
+}
+
 export interface ElementSelection {
   tagName: string;
   id: string;
   classNames: string[];
   text: string | null;
   attributes: Record<string, string>;
+  /** Exact JSX location when the app runs with @frameweave/next. */
+  sourceLocation?: SourceLocation | null;
   rectangle: {
     x: number;
     y: number;
@@ -28,7 +37,7 @@ export interface SourceMatch {
   filePath: string;
   line: number;
   column: number;
-  confidence: "high" | "medium" | "low";
+  confidence: "exact" | "high" | "medium" | "low";
   className?: string | null;
   classNameEditable?: boolean;
 }
@@ -43,11 +52,11 @@ export type WebviewToExtensionMessage =
     }
   | {
       type: "openSource";
-      selection: ElementSelection;
+      match: SourceMatch;
     }
   | {
       type: "updateClassName";
-      selection: ElementSelection;
+      match: SourceMatch;
       className: string;
     };
 
