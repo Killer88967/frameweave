@@ -1,0 +1,100 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "version": 4,
+  "final_space": true,
+  "blocks": [
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "segments": [
+        {
+          "type": "path",
+          "style": "plain",
+          "foreground": "#61AFEF",
+          "template": "{{ .Path }}",
+          "options": {
+            "style": "full"
+          }
+        },
+        {
+          "type": "git",
+          "style": "plain",
+          "foreground": "#98C379",
+          "template": " ({{ .HEAD }}{{ if .Working.Changed }} *{{ end }}{{ if .Staging.Changed }} +{{ end }}{{ if gt .Ahead 0 }} ^{{ .Ahead }}{{ end }}{{ if gt .Behind 0 }} v{{ .Behind }}{{ end }})",
+          "options": {
+            "branch_icon": "",
+            "branch_ahead_icon": "",
+            "branch_behind_icon": "",
+            "commit_icon": "",
+            "tag_icon": "",
+            "rebase_icon": "",
+            "cherry_pick_icon": "",
+            "merge_icon": "",
+            "no_commits_icon": ""
+          }
+        },
+        {
+          "type": "text",
+          "style": "plain",
+          "foreground": "#C678DD",
+          "template": "{{ if .Env.FRAMEWEAVE_PM }} [{{ .Env.FRAMEWEAVE_PM }}]{{ end }}"
+        },
+        {
+          "type": "node",
+          "style": "plain",
+          "foreground": "#98C379",
+          "template": " node {{ .Full }}",
+          "options": {
+            "display_mode": "files",
+            "fetch_version": true
+          }
+        },
+        {
+          "type": "python",
+          "style": "plain",
+          "foreground": "#E5C07B",
+          "template": " python {{ .Full }}",
+          "options": {
+            "display_mode": "files",
+            "fetch_version": true
+          }
+        },
+        {
+          "type": "go",
+          "style": "plain",
+          "foreground": "#56B6C2",
+          "template": " go {{ .Full }}",
+          "options": {
+            "display_mode": "files",
+            "fetch_version": true
+          }
+        },
+        {
+          "type": "rust",
+          "style": "plain",
+          "foreground": "#D19A66",
+          "template": " rust {{ .Full }}",
+          "options": {
+            "display_mode": "files",
+            "fetch_version": true
+          }
+        },
+        {
+          "type": "status",
+          "style": "plain",
+          "foreground": "#E06C75",
+          "template": "{{ if gt .Code 0 }} [exit {{ .Code }}]{{ end }}",
+          "options": {
+            "always_enabled": true
+          }
+        },
+        {
+          "type": "text",
+          "style": "plain",
+          "foreground": "#61AFEF",
+          "template": " > "
+        }
+      ]
+    }
+  ]
+}
