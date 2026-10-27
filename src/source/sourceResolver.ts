@@ -4,9 +4,13 @@ import * as vscode from "vscode";
 
 import type {
   ElementSelection,
+  EventBinding,
   SourceLocation,
   SourceMatch,
+  SourceSnippet,
 } from "../shared/protocol.js";
+
+const SNIPPET_MAX_LINES = 40;
 
 interface Candidate {
   match: SourceMatch;
@@ -16,16 +20,130 @@ interface Candidate {
 export async function resolveElementSource(
   selection: ElementSelection,
 ): Promise<SourceMatch | null> {
-  if (selection.sourceLocation) {
-    const exact = await resolveFromLocation(
-      selection,
-      selection.sourceLocation,
-    );
+  const exact = selection.sourceLocation
+    ? await resolveFromLocation(selection, selection.sourceLocation)
+    : null;
 
-    if (exact) return exact;
+  const match = exact ?? (await guessElementSource(selection));
+
+  return match ? withSourceDetails(match) : null;
+}
+
+/**
+ * Adds what the Source Code and Events panels show: the element's JSX and
+ * its on* handlers. Leaves the match as-is if the file can't be read.
+ */
+export async function withSourceDetails(
+  match: SourceMatch,
+): Promise<SourceMatch> {
+  const uri = await findSourceUri(match.filePath);
+
+  if (!uri) return match;
+
+  let text: string;
+
+  try {
+    text = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri));
+  } catch {
+    return match;
   }
 
-  return guessElementSource(selection);
+  const file = parse(text, {
+    sourceType: "unambiguous",
+    plugins: ["jsx", "typescript"],
+    errorRecovery: true,
+  });
+
+  const element = findJsxElement(file, match.line, match.column);
+
+  if (!element) return match;
+
+  return {
+    ...match,
+    snippet: readSnippet(text, element),
+    events: readEvents(text, element.openingElement),
+  };
+}
+
+function findJsxElement(
+  file: t.File,
+  line: number,
+  column: number,
+): t.JSXElement | null {
+  let result: t.JSXElement | null = null;
+
+  visit(file.program, (node) => {
+    if (!t.isJSXElement(node)) return;
+
+    const start = node.openingElement.loc?.start;
+
+    if (start && start.line === line && start.column + 1 === column) {
+      result = node;
+    }
+  });
+
+  return result;
+}
+
+function readSnippet(
+  source: string,
+  element: t.JSXElement,
+): SourceSnippet | null {
+  const location = element.loc;
+
+  if (!location) return null;
+
+  const lines = source
+    .split(/\r?\n/)
+    .slice(location.start.line - 1, location.end.line);
+
+  const visible = lines.slice(0, SNIPPET_MAX_LINES);
+
+  // Strip the shared indentation so deeply nested JSX still fits the panel.
+  const indent = Math.min(
+    ...visible
+      .filter((line) => line.trim() !== "")
+      .map((line) => line.length - line.trimStart().length),
+  );
+
+  return {
+    startLine: location.start.line,
+    code: visible.map((line) => line.slice(indent)).join("\n"),
+    truncated: lines.length > visible.length,
+  };
+}
+
+function readEvents(
+  source: string,
+  element: t.JSXOpeningElement,
+): EventBinding[] {
+  const events: EventBinding[] = [];
+
+  for (const attribute of element.attributes) {
+    if (!t.isJSXAttribute(attribute) || !t.isJSXIdentifier(attribute.name)) {
+      continue;
+    }
+
+    const name = attribute.name.name;
+
+    if (!/^on[A-Z]/.test(name)) continue;
+
+    const value = attribute.value;
+    const range = t.isJSXExpressionContainer(value)
+      ? readNodeRange(value.expression)
+      : null;
+
+    const handler = range
+      ? source.slice(range.start, range.end).replace(/\s+/g, " ")
+      : "";
+
+    events.push({
+      name,
+      handler: handler.length > 60 ? `${handler.slice(0, 57)}…` : handler,
+    });
+  }
+
+  return events;
 }
 
 /**
@@ -229,10 +347,10 @@ export async function updateElementClassName(
     throw new Error(`Could not save ${match.filePath}.`);
   }
 
-  return {
+  return withSourceDetails({
     ...match,
     className,
-  };
+  });
 }
 
 /**

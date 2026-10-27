@@ -13,6 +13,8 @@ export interface ElementSelection {
   attributes: Record<string, string>;
   /** Exact JSX location when the app runs with @frameweave/next. */
   sourceLocation?: SourceLocation | null;
+  /** Component tree node this element belongs to. */
+  nodeId?: number | null;
   rectangle: {
     x: number;
     y: number;
@@ -23,10 +25,14 @@ export interface ElementSelection {
     display: string;
     position: string;
     padding: string;
+    margin: string;
     gap: string;
     color: string;
     backgroundColor: string;
     fontSize: string;
+    fontWeight: string;
+    lineHeight: string;
+    textAlign: string;
   };
 }
 
@@ -40,6 +46,29 @@ export interface SourceMatch {
   confidence: "exact" | "high" | "medium" | "low";
   className?: string | null;
   classNameEditable?: boolean;
+  snippet?: SourceSnippet | null;
+  events?: EventBinding[];
+}
+
+export interface SourceSnippet {
+  /** Line number of the first line in `code`. */
+  startLine: number;
+  code: string;
+  truncated: boolean;
+}
+
+export interface EventBinding {
+  /** e.g. "onClick" */
+  name: string;
+  /** Handler source, e.g. "handleClick" or "() => setOpen(true)" */
+  handler: string;
+}
+
+export interface ComponentTreeNode {
+  id: number;
+  label: string;
+  kind: "component" | "element";
+  children: ComponentTreeNode[];
 }
 
 export type WebviewToExtensionMessage =
@@ -72,8 +101,20 @@ export type ExtensionToWebviewMessage =
       match: SourceMatch | null;
     };
 
-export interface PreviewSelectionMessage {
-  source: "frameweave-preview";
-  type: "element-selected";
-  payload: ElementSelection;
-}
+export type PreviewMessage =
+  | {
+      source: "frameweave-preview";
+      type: "element-selected";
+      payload: ElementSelection;
+    }
+  | {
+      source: "frameweave-preview";
+      type: "tree-updated";
+      payload: ComponentTreeNode[];
+    };
+
+/** Messages the designer sends into the preview iframe. */
+export type HostToPreviewMessage =
+  | { source: "frameweave-host"; type: "request-tree" }
+  | { source: "frameweave-host"; type: "select-node"; id: number }
+  | { source: "frameweave-host"; type: "hover-node"; id: number | null };

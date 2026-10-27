@@ -1,13 +1,18 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import type {
+  ComponentTreeNode,
   ElementSelection,
   ExtensionToWebviewMessage,
-  PreviewSelectionMessage,
+  HostToPreviewMessage,
+  PreviewMessage,
   SourceMatch,
   WebviewToExtensionMessage,
 } from "../shared/protocol.js";
+import { ComponentTree } from "./components/ComponentTree.js";
+import { PropertiesPanel } from "./components/PropertiesPanel.js";
+import { SourceCodePanel } from "./components/SourceCodePanel.js";
 import "./styles.css";
 
 interface VsCodeApi {
@@ -22,50 +27,72 @@ declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
 
+const VIEWPORTS = {
+  Desktop: "100%",
+  Tablet: "768px",
+  Mobile: "390px",
+} as const;
+
+type Viewport = keyof typeof VIEWPORTS;
+
 function App({ previewUrl }: AppProps) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  const [tree, setTree] = useState<ComponentTreeNode[]>([]);
+  const [viewport, setViewport] = useState<Viewport>("Desktop");
   const [selection, setSelection] = useState<ElementSelection | null>(null);
   const [sourceMatch, setSourceMatch] = useState<SourceMatch | null>(null);
+  const [resolving, setResolving] = useState(false);
   const [classNameDraft, setClassNameDraft] = useState("");
   const [updateStatus, setUpdateStatus] = useState<{
     ok: boolean;
     message: string;
   } | null>(null);
 
-  useEffect(() => {
-    if (!previewUrl) return;
+  const previewOrigin = previewUrl ? new URL(previewUrl).origin : null;
 
-    const previewOrigin = new URL(previewUrl).origin;
+  const sendToPreview = (message: HostToPreviewMessage): void => {
+    if (!previewOrigin) return;
+
+    frameRef.current?.contentWindow?.postMessage(message, previewOrigin);
+  };
+
+  useEffect(() => {
+    if (!previewOrigin) return;
 
     const receiveMessage = (event: MessageEvent<unknown>): void => {
+      // From the extension host.
       if (isSourceResolvedMessage(event.data)) {
+        setResolving(false);
         setSourceMatch(event.data.match);
-
-        if (event.data.match?.className !== undefined) {
-          setClassNameDraft(event.data.match.className ?? "");
-        }
-
+        setClassNameDraft(event.data.match?.className ?? "");
         return;
       }
 
       if (isSourceUpdatedMessage(event.data)) {
-        setUpdateStatus({
-          ok: event.data.ok,
-          message: event.data.message,
-        });
+        setUpdateStatus({ ok: event.data.ok, message: event.data.message });
 
         if (event.data.match) setSourceMatch(event.data.match);
 
         return;
       }
 
-      if (event.origin !== previewOrigin || !isSelectedMessage(event.data)) {
+      // From the preview iframe.
+      if (event.origin !== previewOrigin || !isPreviewMessage(event.data)) {
+        return;
+      }
+
+      if (event.data.type === "tree-updated") {
+        setTree(event.data.payload);
         return;
       }
 
       setSelection(event.data.payload);
       setSourceMatch(null);
+      setResolving(true);
       setClassNameDraft(event.data.payload.classNames.join(" "));
       setUpdateStatus(null);
+
       vscode.postMessage({
         type: "resolveSource",
         selection: event.data.payload,
@@ -75,7 +102,11 @@ function App({ previewUrl }: AppProps) {
     window.addEventListener("message", receiveMessage);
 
     return () => window.removeEventListener("message", receiveMessage);
-  }, [previewUrl]);
+  }, [previewOrigin]);
+
+  const selectedName =
+    sourceMatch?.componentName ??
+    (selection ? `<${selection.tagName}>` : "No element selected");
 
   return (
     <div className="designer">
@@ -83,9 +114,16 @@ function App({ previewUrl }: AppProps) {
         <strong className="brand">Frameweave</strong>
 
         <div className="viewport-controls">
-          <button type="button">Desktop</button>
-          <button type="button">Tablet</button>
-          <button type="button">Mobile</button>
+          {(Object.keys(VIEWPORTS) as Viewport[]).map((name) => (
+            <button
+              key={name}
+              type="button"
+              className={name === viewport ? "active" : undefined}
+              onClick={() => setViewport(name)}
+            >
+              {name}
+            </button>
+          ))}
         </div>
 
         <button
@@ -97,49 +135,38 @@ function App({ previewUrl }: AppProps) {
         </button>
       </header>
 
-      <aside className="layers-panel">
+      <ComponentTree
+        nodes={tree}
+        selectedId={selection?.nodeId ?? null}
+        connected={previewUrl !== undefined}
+        onSelect={(id) =>
+          sendToPreview({ source: "frameweave-host", type: "select-node", id })
+        }
+        onHover={(id) =>
+          sendToPreview({ source: "frameweave-host", type: "hover-node", id })
+        }
+      />
+
+      <main className="panel canvas">
         <div className="panel-heading">
-          <span>Layers</span>
-          <button type="button" aria-label="Add element">
-            +
-          </button>
-        </div>
-
-        <div className="layer active">
-          <span>▾</span>
-          <span>Page</span>
-        </div>
-
-        <div className="layer nested">
-          <span>◇</span>
-          <span>Main</span>
-        </div>
-
-        <div className="layer deeply-nested">
-          <span>◇</span>
-          <span>
-            {sourceMatch?.componentName ??
-              (selection ? `<${selection.tagName}>` : "No element selected")}
-          </span>
-        </div>
-      </aside>
-
-      <main className="canvas">
-        <div className="canvas-header">
-          <span>
-            {sourceMatch?.componentName ??
-              (selection ? `<${selection.tagName}>` : "No element selected")}
-          </span>
-          <span>100%</span>
+          <span>Live Canvas</span>
+          <span className="heading-detail">{selectedName}</span>
         </div>
 
         <div className="canvas-workspace">
-          <div className="page-frame">
+          <div className="page-frame" style={{ width: VIEWPORTS[viewport] }}>
             {previewUrl ? (
               <iframe
+                ref={frameRef}
                 className="live-preview"
                 title="Application preview"
                 src={previewUrl}
+                onLoad={() =>
+                  sendToPreview({
+                    source: "frameweave-host",
+                    type: "request-tree",
+                  })
+                }
               />
             ) : (
               <div className="placeholder">
@@ -155,11 +182,7 @@ function App({ previewUrl }: AppProps) {
                 <button
                   className="connect-button"
                   type="button"
-                  onClick={() => {
-                    vscode.postMessage({
-                      type: "connectPreview",
-                    });
-                  }}
+                  onClick={() => vscode.postMessage({ type: "connectPreview" })}
                 >
                   Connect preview
                 </button>
@@ -169,184 +192,49 @@ function App({ previewUrl }: AppProps) {
         </div>
       </main>
 
-      <aside className="properties-panel">
-        <div className="panel-heading">
-          <span>Properties</span>
-        </div>
+      <SourceCodePanel
+        match={sourceMatch}
+        resolving={resolving}
+        onOpen={(match) => vscode.postMessage({ type: "openSource", match })}
+      />
 
-        <section>
-          <h2>Source</h2>
+      <PropertiesPanel
+        selection={selection}
+        match={sourceMatch}
+        classNameDraft={classNameDraft}
+        status={updateStatus}
+        onDraftChange={(value) => {
+          setClassNameDraft(value);
+          setUpdateStatus(null);
+        }}
+        onApply={() => {
+          if (!sourceMatch) return;
 
-          {sourceMatch ? (
-            <div className="source-details">
-              <strong>{sourceMatch.componentName}</strong>
-              <span>Rendered as &lt;{sourceMatch.renderedTagName}&gt;</span>
-              <span>
-                {sourceMatch.filePath}:{sourceMatch.line}:{sourceMatch.column}
-              </span>
-              {sourceMatch.importSource ? (
-                <span>Import: {sourceMatch.importSource}</span>
-              ) : null}
-              <span>Confidence: {sourceMatch.confidence}</span>
-              <button
-                type="button"
-                onClick={() =>
-                  vscode.postMessage({ type: "openSource", match: sourceMatch })
-                }
-              >
-                Open in editor
-              </button>
-            </div>
-          ) : (
-            <span className="muted-value">
-              {selection ? "Resolving source…" : "No element selected"}
-            </span>
-          )}
-        </section>
+          setUpdateStatus(null);
 
-        <section>
-          <h2>Tailwind classes</h2>
-
-          <textarea
-            value={classNameDraft}
-            disabled={sourceMatch?.classNameEditable !== true}
-            placeholder="Select an editable element"
-            spellCheck={false}
-            onChange={(event) => {
-              setClassNameDraft(event.target.value);
-              setUpdateStatus(null);
-            }}
-          />
-
-          <div className="property-actions">
-            <button
-              type="button"
-              disabled={
-                !sourceMatch ||
-                sourceMatch.classNameEditable !== true ||
-                classNameDraft === (sourceMatch.className ?? "")
-              }
-              onClick={() => {
-                if (!sourceMatch) return;
-
-                setUpdateStatus(null);
-
-                vscode.postMessage({
-                  type: "updateClassName",
-                  match: sourceMatch,
-                  className: classNameDraft.trim().replace(/\s+/g, " "),
-                });
-              }}
-            >
-              Apply classes
-            </button>
-
-            <button
-              type="button"
-              disabled={!sourceMatch}
-              onClick={() => {
-                setClassNameDraft(sourceMatch?.className ?? "");
-                setUpdateStatus(null);
-              }}
-            >
-              Reset
-            </button>
-          </div>
-
-          {updateStatus ? (
-            <span
-              className={`update-status ${
-                updateStatus.ok ? "success" : "error"
-              }`}
-            >
-              {updateStatus.message}
-            </span>
-          ) : null}
-
-          {sourceMatch && sourceMatch.classNameEditable !== true ? (
-            <span className="muted-value">
-              Dynamic className expressions are read-only for now.
-            </span>
-          ) : null}
-        </section>
-
-        <section>
-          <h2>Layout</h2>
-
-          <div className="property-grid">
-            <label>
-              W
-              <input
-                value={
-                  selection ? Math.round(selection.rectangle.width) : "Auto"
-                }
-                readOnly
-              />
-            </label>
-
-            <label>
-              H
-              <input
-                value={
-                  selection ? Math.round(selection.rectangle.height) : "Auto"
-                }
-                readOnly
-              />
-            </label>
-          </div>
-        </section>
-
-        <section>
-          <h2>Spacing</h2>
-
-          <div className="property-grid">
-            <label>
-              Padding
-              <input value={selection?.styles.padding ?? "0px"} readOnly />
-            </label>
-
-            <label>
-              Gap
-              <input value={selection?.styles.gap ?? "normal"} readOnly />
-            </label>
-          </div>
-        </section>
-
-        <section>
-          <h2>Appearance</h2>
-
-          <label>
-            Background
-            <div className="color-property">
-              <span />
-              <input
-                value={selection?.styles.backgroundColor ?? "transparent"}
-                readOnly
-              />
-            </div>
-          </label>
-        </section>
-
-        <section>
-          <h2>Events</h2>
-
-          <button className="wide-button" type="button">
-            Add event
-          </button>
-        </section>
-      </aside>
+          vscode.postMessage({
+            type: "updateClassName",
+            match: sourceMatch,
+            className: classNameDraft.trim().replace(/\s+/g, " "),
+          });
+        }}
+        onReset={() => {
+          setClassNameDraft(sourceMatch?.className ?? "");
+          setUpdateStatus(null);
+        }}
+      />
     </div>
   );
 }
 
-function isSelectedMessage(value: unknown): value is PreviewSelectionMessage {
+function isPreviewMessage(value: unknown): value is PreviewMessage {
   if (typeof value !== "object" || value === null) return false;
 
   return (
     "source" in value &&
     value.source === "frameweave-preview" &&
     "type" in value &&
-    value.type === "element-selected" &&
+    (value.type === "element-selected" || value.type === "tree-updated") &&
     "payload" in value
   );
 }
@@ -387,6 +275,6 @@ const previewUrl = rootElement.dataset.previewUrl || undefined;
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App previewUrl={previewUrl !== undefined ? previewUrl : ""} />
+    <App {...(previewUrl !== undefined ? { previewUrl } : {})} />
   </StrictMode>,
 );

@@ -1,6 +1,7 @@
 // Dev-only loader: stamps every intrinsic JSX element (<div>, <button>, ...)
 // with data-fw-loc="<absolute file>:<line>:<column>" so the Frameweave bridge
-// can report exactly where a clicked element came from.
+// can report exactly where a clicked element came from, and with
+// data-fw-owner="<Component>" naming the component that renders it.
 //
 // Components (<Card />) are left alone: the intrinsic elements they render
 // carry their own locations, and props like data-* are not always forwarded.
@@ -8,6 +9,7 @@
 const { parse } = require("@babel/parser");
 
 const ATTRIBUTE = "data-fw-loc";
+const OWNER_ATTRIBUTE = "data-fw-owner";
 
 /** @this {{ resourcePath: string }} */
 module.exports = function frameweaveLoader(source) {
@@ -35,7 +37,7 @@ module.exports = function frameweaveLoader(source) {
 
   const insertions = [];
 
-  visit(ast.program, (node) => {
+  visit(ast.program, null, (node, owner) => {
     if (node.type !== "JSXOpeningElement") return;
     if (node.name.type !== "JSXIdentifier") return;
     if (!/^[a-z]/.test(node.name.name)) return;
@@ -52,9 +54,11 @@ module.exports = function frameweaveLoader(source) {
 
     const { line, column } = node.loc.start;
 
+    const ownerText = owner ? ` ${OWNER_ATTRIBUTE}="${owner}"` : "";
+
     insertions.push({
       offset: node.name.end,
-      text: ` ${ATTRIBUTE}="${filePath}:${line}:${column + 1}"`,
+      text: ` ${ATTRIBUTE}="${filePath}:${line}:${column + 1}"${ownerText}`,
     });
   });
 
@@ -73,8 +77,10 @@ module.exports = function frameweaveLoader(source) {
   return output;
 };
 
-function visit(node, callback) {
-  callback(node);
+function visit(node, owner, callback) {
+  const currentOwner = readComponentName(node) ?? owner;
+
+  callback(node, currentOwner);
 
   for (const key of Object.keys(node)) {
     if (key === "loc" || key === "extra" || key.endsWith("Comments")) continue;
@@ -83,10 +89,30 @@ function visit(node, callback) {
 
     if (Array.isArray(child)) {
       for (const item of child) {
-        if (item && typeof item.type === "string") visit(item, callback);
+        if (item && typeof item.type === "string") {
+          visit(item, currentOwner, callback);
+        }
       }
     } else if (child && typeof child.type === "string") {
-      visit(child, callback);
+      visit(child, currentOwner, callback);
     }
   }
+}
+
+// function Card() {}  /  const Card = () => {}  /  const Card = memo(() => {})
+function readComponentName(node) {
+  let name = null;
+
+  if (node.type === "FunctionDeclaration") {
+    name = node.id?.name ?? null;
+  } else if (
+    node.type === "VariableDeclarator" &&
+    node.id.type === "Identifier" &&
+    node.init &&
+    /Function|CallExpression/.test(node.init.type)
+  ) {
+    name = node.id.name;
+  }
+
+  return name && /^[A-Z]/.test(name) ? name : null;
 }

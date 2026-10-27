@@ -1,6 +1,7 @@
 :root {
   color-scheme: light dark;
   font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size, 13px);
   color: var(--vscode-foreground);
   background: var(--vscode-editor-background);
 }
@@ -14,22 +15,8 @@ body,
 #root {
   width: 100%;
   height: 100%;
-  min-width: 0;
-  min-height: 0;
   margin: 0;
   overflow: hidden;
-}
-
-body {
-  position: fixed;
-  inset: 0;
-}
-
-.designer {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
 }
 
 button,
@@ -41,7 +28,9 @@ textarea {
 
 button {
   border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 3px;
   background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
   cursor: pointer;
 }
 
@@ -54,12 +43,33 @@ button:disabled {
   opacity: 0.5;
 }
 
+button.primary,
+.preview-button,
+.connect-button {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+}
+
+button.primary:not(:disabled):hover,
+.preview-button:hover,
+.connect-button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+/*
+ * ┌──────────┬─────────────────────┐
+ * │ tree     │ canvas              │
+ * ├──────────┴──────────┬──────────┤
+ * │ source              │ props    │
+ * └─────────────────────┴──────────┘
+ */
 .designer {
   display: grid;
   grid-template:
-    "toolbar toolbar toolbar" 42px
-    "layers canvas properties" 1fr /
-    220px minmax(320px, 1fr) 250px;
+    "toolbar toolbar toolbar" 40px
+    "tree canvas canvas" minmax(0, 1fr)
+    "source source properties" minmax(180px, 36%)
+    / 220px minmax(0, 1fr) 280px;
   width: 100%;
   height: 100%;
 }
@@ -85,95 +95,167 @@ button:disabled {
 
 .viewport-controls button {
   padding: 4px 10px;
-  border-radius: 3px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.viewport-controls button.active {
+  background: var(--vscode-button-secondaryBackground);
+  border-color: var(--vscode-focusBorder);
 }
 
 .preview-button {
   justify-self: end;
   padding: 5px 14px;
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
 }
 
-.layers-panel,
-.properties-panel {
+/* ---- Panels ---- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
   background: var(--vscode-sideBar-background);
-}
-
-.layers-panel {
-  grid-area: layers;
-  border-right: 1px solid var(--vscode-panel-border);
-}
-
-.properties-panel {
-  grid-area: properties;
-  overflow-y: auto;
-  border-left: 1px solid var(--vscode-panel-border);
 }
 
 .panel-heading {
   display: flex;
-  height: 38px;
+  flex: none;
+  gap: 8px;
+  height: 32px;
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
   border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.panel-heading button {
-  width: 24px;
-  height: 24px;
-  border: 0;
-  background: transparent;
-  font-size: 18px;
+.heading-detail {
+  overflow: hidden;
+  color: var(--vscode-descriptionForeground);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 
-.layer {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  height: 30px;
-  padding: 0 10px;
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
-.layer.active {
-  background: var(--vscode-list-activeSelectionBackground);
-  color: var(--vscode-list-activeSelectionForeground);
+.empty-state,
+.muted-value {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.layer.nested {
-  padding-left: 28px;
+.empty-state {
+  margin: 0;
+  padding: 12px;
 }
 
-.layer.deeply-nested {
-  padding-left: 46px;
+.tree-panel {
+  grid-area: tree;
+  border-right: 1px solid var(--vscode-panel-border);
 }
 
 .canvas {
   grid-area: canvas;
-  display: grid;
-  grid-template-rows: 32px 1fr;
-  min-width: 0;
   background: var(--vscode-editor-background);
 }
 
-.canvas-header {
+.source-panel {
+  grid-area: source;
+  border-top: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+}
+
+.properties-panel {
+  grid-area: properties;
+  border-top: 1px solid var(--vscode-panel-border);
+  border-left: 1px solid var(--vscode-panel-border);
+}
+
+/* ---- Component tree ---- */
+
+.tree,
+.tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tree {
+  padding: 4px 0;
+}
+
+.tree-row {
   display: flex;
+  gap: 4px;
+  width: 100%;
+  min-height: 26px;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--vscode-panel-border);
+  padding-right: 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.tree-row:not(:disabled):hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.tree-row.selected,
+.tree-row.selected:not(:disabled):hover {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.tree-branch {
+  color: var(
+    --vscode-tree-indentGuidesStroke,
+    var(--vscode-descriptionForeground)
+  );
+  font-family: var(--vscode-editor-font-family);
+}
+
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-row.element .tree-label {
   color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
   font-size: 12px;
 }
 
+.tree-row.selected.element .tree-label {
+  color: inherit;
+}
+
+/* ---- Canvas ---- */
+
 .canvas-workspace {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  justify-content: center;
   overflow: auto;
-  padding: 40px;
+  padding: 24px;
   background-image:
     linear-gradient(var(--vscode-widget-border) 1px, transparent 1px),
     linear-gradient(90deg, var(--vscode-widget-border) 1px, transparent 1px);
@@ -182,18 +264,29 @@ button:disabled {
 
 .page-frame {
   display: grid;
-  width: min(900px, 90%);
-  min-height: 560px;
+  flex: none;
+  max-width: 100%;
+  height: 100%;
+  min-height: 0;
   place-items: center;
   border: 1px solid var(--vscode-widget-border);
   border-radius: 4px;
   background: var(--vscode-editor-background);
   box-shadow: 0 10px 35px rgb(0 0 0 / 25%);
   overflow: hidden;
+  transition: width 150ms ease;
+}
+
+.live-preview {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
 }
 
 .placeholder {
   max-width: 320px;
+  padding: 24px;
   text-align: center;
   color: var(--vscode-descriptionForeground);
 }
@@ -208,6 +301,83 @@ button:disabled {
   font-size: 36px;
 }
 
+.connect-button {
+  margin-top: 8px;
+  padding: 7px 14px;
+}
+
+/* ---- Source code ---- */
+
+.source-meta {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  align-items: center;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.source-meta > span:first-child {
+  overflow: hidden;
+  color: var(--vscode-descriptionForeground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* keep the file name visible when the path is cut off */
+}
+
+.source-meta button {
+  flex: none;
+  padding: 2px 8px;
+}
+
+.confidence {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 10px;
+}
+
+.confidence.low {
+  background: var(--vscode-inputValidation-warningBackground);
+}
+
+.code {
+  margin: 0;
+  padding: 8px 0;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size, 12px);
+  line-height: 1.55;
+}
+
+.code-line {
+  display: flex;
+  white-space: pre;
+}
+
+.line-number {
+  flex: none;
+  width: 4ch;
+  margin-right: 16px;
+  color: var(--vscode-editorLineNumber-foreground);
+  text-align: right;
+  user-select: none;
+}
+
+.code-line code {
+  padding-right: 16px;
+  font: inherit;
+}
+
+.code-more {
+  padding-left: calc(4ch + 16px);
+  color: var(--vscode-descriptionForeground);
+}
+
+/* ---- Properties ---- */
+
 .properties-panel section {
   padding: 12px;
   border-bottom: 1px solid var(--vscode-panel-border);
@@ -215,35 +385,16 @@ button:disabled {
 
 .properties-panel h2 {
   margin: 0 0 10px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.source-details {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
   font-size: 11px;
-}
-
-.source-details strong,
-.source-details span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.source-details span,
-.muted-value {
-  color: var(--vscode-descriptionForeground);
+  font-weight: 600;
 }
 
 .properties-panel textarea {
   width: 100%;
-  min-height: 78px;
+  min-height: 72px;
   resize: vertical;
   padding: 7px;
-  border: 1px solid var(--vscode-input-border);
+  border: 1px solid var(--vscode-input-border, transparent);
   border-radius: 2px;
   outline: none;
   background: var(--vscode-input-background);
@@ -272,21 +423,11 @@ button:disabled {
   padding: 6px 8px;
 }
 
-.property-actions button:first-child {
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
-}
-
-.property-actions button:first-child:not(:disabled):hover {
-  background: var(--vscode-button-hoverBackground);
-}
-
 .update-status,
 .properties-panel .muted-value {
   display: block;
   margin-top: 8px;
   font-size: 11px;
-  line-height: 1.4;
 }
 
 .update-status.success {
@@ -297,112 +438,100 @@ button:disabled {
   color: var(--vscode-errorForeground);
 }
 
-.properties-panel label {
-  display: grid;
-  gap: 5px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 11px;
-}
-
 .property-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
+.property-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.properties-panel label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
 .properties-panel input {
   width: 100%;
   min-width: 0;
-  padding: 5px 7px;
-  border: 1px solid var(--vscode-input-border);
+  padding: 4px 6px;
+  border: 1px solid var(--vscode-input-border, transparent);
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
+  font-size: 12px;
 }
 
 .color-property {
   display: grid;
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: 22px minmax(0, 1fr);
 }
 
 .color-property span {
-  background: #18181b;
-  border: 1px solid var(--vscode-input-border);
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+}
+
+.event-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.event-list li {
+  display: grid;
+  gap: 2px;
+}
+
+.event-name {
+  font-weight: 600;
+}
+
+.event-list code {
+  overflow: hidden;
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wide-button {
   width: 100%;
+  margin-top: 8px;
   padding: 6px;
 }
 
-.live-preview {
-  width: 100%;
-  height: 100%;
-  min-height: 560px;
-  border: 0;
-  background: white;
-}
-
-.connect-button {
-  margin-top: 8px;
-  padding: 7px 14px;
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
-  border-radius: 3px;
-}
-
+/*
+ * Narrow screens (iPad split view, phones): one scrolling column.
+ * Canvas first, then tree, source and properties underneath.
+ */
 @media (max-width: 800px) {
   html,
   body,
   #root {
     height: 100dvh;
-    min-height: 100dvh;
   }
 
   .designer {
-    width: 100%;
+    display: flex;
+    flex-direction: column;
     height: 100dvh;
-    min-height: 0;
-    grid-template:
-      "toolbar" 42px
-      "canvas" minmax(0, 58fr)
-      "properties" minmax(0, 42fr) /
-      minmax(0, 1fr);
-  }
-
-  .layers-panel {
-    display: none;
-  }
-
-  .properties-panel {
-    display: block;
-    grid-area: properties;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    max-height: 100%;
-    padding-bottom: env(safe-area-inset-bottom);
-    overflow-x: hidden;
-    overflow-y: scroll;
-    border-top: 1px solid var(--vscode-panel-border);
-    border-left: 0;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
-    touch-action: pan-y;
-  }
-
-  .properties-panel > section {
-    position: relative;
-    width: 100%;
-  }
-
-  .properties-panel .panel-heading {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background: var(--vscode-sideBar-background);
   }
 
   .toolbar {
+    flex: none;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    height: 40px;
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 8px;
   }
@@ -417,33 +546,47 @@ button:disabled {
     white-space: nowrap;
   }
 
-  .canvas,
-  .canvas-workspace,
-  .page-frame {
-    min-width: 0;
-  }
-
-  .canvas,
-  .canvas-workspace,
-  .properties-panel {
-    min-height: 0;
-  }
-
   .canvas {
-    overflow: hidden;
+    flex: none;
+    order: 1;
+    height: 60dvh;
+  }
+
+  .tree-panel {
+    order: 2;
+  }
+
+  .source-panel {
+    order: 3;
+  }
+
+  .properties-panel {
+    order: 4;
   }
 
   .canvas-workspace {
-    padding: 16px;
+    padding: 12px;
   }
 
-  .page-frame {
-    width: 100%;
-    height: 100%;
-    min-height: 0;
+  .tree-panel,
+  .source-panel,
+  .properties-panel {
+    flex: none;
+    max-height: none;
+    border: 0;
+    border-top: 1px solid var(--vscode-panel-border);
   }
 
-  .live-preview {
-    min-height: 0;
+  .tree-panel .panel-body,
+  .source-panel .panel-body {
+    max-height: 40dvh;
+  }
+
+  .properties-panel {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .properties-panel .panel-body {
+    overflow: visible;
   }
 }
