@@ -24,6 +24,7 @@ export class TailwindAdapter implements TechnologyAdapter {
 
     const stylesheetPaths: string[] = [];
     let usesThemeDirective = false;
+    let usesConfigDirective = false;
 
     for (const stylesheetUri of candidateStylesheets) {
       const contents = await context.readText(stylesheetUri);
@@ -41,6 +42,10 @@ export class TailwindAdapter implements TechnologyAdapter {
 
       if (/@theme\b/.test(contents)) {
         usesThemeDirective = true;
+      }
+
+      if (/@config\s+["']/.test(contents)) {
+        usesConfigDirective = true;
       }
     }
 
@@ -65,6 +70,8 @@ export class TailwindAdapter implements TechnologyAdapter {
 
     if (strategy === "css-first") {
       capabilities.push("css-theme", "theme-variables", "custom-utilities");
+
+      if (usesConfigDirective) capabilities.push("legacy-javascript-config");
     }
 
     if (strategy === "javascript-config") {

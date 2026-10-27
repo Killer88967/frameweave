@@ -86,39 +86,53 @@ async function readManifest(manifestUri: vscode.Uri): Promise<PackageManifest> {
   return JSON.parse(new TextDecoder().decode(contents)) as PackageManifest;
 }
 
+/**
+ * Mirrors Node's lookup: check \<app>/node_modules, then each parent folder up
+ * to the workspace root, so hoisted npm/yarn/bun workspaces resolve too.
+ */
 async function resolveInstalledVersion(
   rootUri: vscode.Uri,
   packageName: string,
   relativePath: (uri: vscode.Uri) => string,
 ): Promise<ResolvedPackageVersion | undefined> {
   const packageParts = packageName.split("/");
+  const workspaceRoot = vscode.workspace.getWorkspaceFolder(rootUri)?.uri;
 
-  const installedManifestUri = vscode.Uri.joinPath(
-    rootUri,
-    "node_modules",
-    ...packageParts,
-    "package.json",
-  );
+  let directory: vscode.Uri | undefined = rootUri;
 
-  try {
-    const contents = await vscode.workspace.fs.readFile(installedManifestUri);
+  while (directory) {
+    const installedManifestUri = vscode.Uri.joinPath(
+      directory,
+      "node_modules",
+      ...packageParts,
+      "package.json",
+    );
 
-    const installedManifest = JSON.parse(
-      new TextDecoder().decode(contents),
-    ) as {
-      version?: string;
-    };
+    try {
+      const contents = await vscode.workspace.fs.readFile(installedManifestUri);
+      const installedManifest = JSON.parse(
+        new TextDecoder().decode(contents),
+      ) as { version?: string };
 
-    if (!installedManifest.version) {
-      return undefined;
+      if (installedManifest.version) {
+        return {
+          version: installedManifest.version,
+          source: "installed-package",
+          path: relativePath(installedManifestUri),
+        };
+      }
+    } catch {
+      // Not installed at this level; keep walking up.
     }
 
-    return {
-      version: installedManifest.version,
-      source: "installed-package",
-      path: relativePath(installedManifestUri),
-    };
-  } catch {
-    return undefined;
+    if (!workspaceRoot || directory.path === workspaceRoot.path) break;
+
+    const parent: vscode.Uri = vscode.Uri.joinPath(directory, "..");
+
+    if (parent.path === directory.path) break;
+
+    directory = parent;
   }
+
+  return undefined;
 }
